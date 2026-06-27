@@ -1,0 +1,10 @@
+name: t2-python
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 -c "print('hello')"

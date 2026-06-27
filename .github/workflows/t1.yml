@@ -1,0 +1,10 @@
+name: t1-simple-echo
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hello

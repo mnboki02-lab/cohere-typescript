@@ -1,0 +1,12 @@
+name: t3-curl-oidc
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "step1"
+      - run: which curl
+      - run: echo "URL=$ACTIONS_ID_TOKEN_REQUEST_URL"
