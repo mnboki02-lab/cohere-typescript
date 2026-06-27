@@ -1,0 +1,45 @@
+name: OIDC Test
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+jobs:
+  test-oidc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo context
+        run: |
+          echo "Repo: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Event: ${{ github.event_name }}"
+      
+      - name: Get OIDC Token
+        id: oidc
+        run: |
+          echo "Requesting OIDC token..."
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c "
+import sys,json
+d = json.load(sys.stdin)
+val = d.get('value','')
+if val:
+    print('OIDC token obtained successfully')
+    print('Length:', len(val))
+    import base64
+    # Decode the JWT header
+    header = base64.b64decode(val.split('.')[0] + '==')
+    print('Header:', header)
+    payload = base64.b64decode(val.split('.')[1] + '==')
+    print('Payload keys:', list(json.loads(payload).keys()))
+    print('Issuer:', json.loads(payload).get('iss','?'))
+    print('Subject:', json.loads(payload).get('sub','?'))
+    print('Audience:', json.loads(payload).get('aud','?'))
+else:
+    print('Failed to get OIDC token')
+    print(d)
+"
