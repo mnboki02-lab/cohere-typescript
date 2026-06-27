@@ -1,0 +1,63 @@
+name: simple-oidc
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+jobs:
+  test-oidc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check OIDC
+        run: |
+          echo "=== Checking OIDC Token Availability ==="
+          echo "Token var exists: $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_TOKEN\" ] && echo YES || echo NO)"
+          echo "URL var exists: $([ -n \"$ACTIONS_ID_TOKEN_REQUEST_URL\" ] && echo YES || echo NO)"
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "=== Fetching OIDC Token ==="
+            curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" > /tmp/oidc1.json
+            echo "=== Response to audience=api://AzureADTokenExchange ==="
+            cat /tmp/oidc1.json
+            echo ""
+            echo "=== Fetching with audience=github ==="
+            curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" > /tmp/oidc2.json
+            cat /tmp/oidc2.json
+            echo ""
+            echo "=== Fetching with audience=sts.amazonaws.com ==="
+            curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" > /tmp/oidc3.json
+            cat /tmp/oidc3.json
+            echo ""
+          else
+            echo "=== OIDC not available, checking env ==="
+            env | sort > /tmp/env.txt
+            head -50 /tmp/env.txt
+          fi
+      - name: Decode OIDC token
+        run: |
+          for f in /tmp/oidc1.json /tmp/oidc2.json /tmp/oidc3.json; do
+            if [ -f "$f" ]; then
+              echo "=== File: $f ==="
+              TOKEN=$(python3 -c "import sys,json; d=json.load(open('$f')); print(d.get('value','no_value'))" 2>/dev/null)
+              if [ "$TOKEN" != "no_value" ] && [ -n "$TOKEN" ]; then
+                echo "Token length: ${#TOKEN}"
+                python3 -c "
+import base64,json
+parts = '$TOKEN'.split('.')
+if len(parts) >= 2:
+    p = parts[1] + '==' if len(parts[1])%4 else parts[1]
+    try:
+        decoded = json.loads(base64.b64decode(p))
+        for k,v in decoded.items():
+            if k in ('sub','aud','iss','job_workflow_ref','repository','repository_owner'):
+                print(f'{k}={v}')
+        print('FULL_PAYLOAD=' + json.dumps(decoded))
+    except Exception as e:
+        print(f'Decode error: {e}')
+"
+              fi
+            fi
+          done
