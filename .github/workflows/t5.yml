@@ -1,0 +1,11 @@
+name: t5-decode-token
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" > /tmp/t.json
+      - run: python3 -c "import json; d=json.load(open('/tmp/t.json')); print('TOKEN_PRESENT' if d.get('value') else 'NO_TOKEN'); print(str(d)[:200])"

@@ -1,0 +1,13 @@
+name: t4-curl-token
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "start"
+      - run: curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" > /tmp/oidc_resp.json
+      - run: echo "curl done"
+      - run: cat /tmp/oidc_resp.json
