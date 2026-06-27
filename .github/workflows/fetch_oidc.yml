@@ -7,18 +7,32 @@ jobs:
   get-token:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" > /tmp/oidc.json
-      - run: cat /tmp/oidc.json
-      - run: python3 -c "import json,sys; d=json.load(open('/tmp/oidc.json')); print('Token:', d.get('value','none')[:50])" 2>&1 || echo "PY_ERR1"
-      - run: python3 -c "
-import json,base64
-d=json.load(open('/tmp/oidc.json'))
-t=d.get('value','')
+      - name: Fetch token
+        run: |
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" > /tmp/oidc.json
+          echo "DONE fetching"
+      - name: Show raw response
+        run: |
+          cat /tmp/oidc.json
+      - name: Extract and decode
+        run: |
+          python3 << 'PYEOF'
+import json,base64,sys
+with open('/tmp/oidc.json') as f:
+    d = json.load(f)
+t = d.get('value','')
 if t:
-    parts=t.split('.')
-    p=parts[1]+'==' if len(parts[1])%4 else parts[1]
-    decoded=json.loads(base64.b64decode(p))
-    for k,v in decoded.items():
-        if k in ('sub','aud','iss','job_workflow_ref','repository','repository_owner','actor'):
-            print(k+'='+str(v))
-" 2>&1 || echo "PY_ERR2"
+    print('TOKEN_FOUND')
+    print('LENGTH=' + str(len(t)))
+    parts = t.split('.')
+    p = parts[1] + '==' if len(parts[1]) % 4 else parts[1]
+    decoded = json.loads(base64.b64decode(p))
+    for k in ('sub','aud','iss','job_workflow_ref','repository','repository_owner','actor','sha','ref'):
+        if k in decoded:
+            print(k + '=' + str(decoded[k]))
+    print('FULL=' + json.dumps(decoded))
+else:
+    print('NO_TOKEN')
+    print('RESP=' + json.dumps(d))
+PYEOF
