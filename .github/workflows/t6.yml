@@ -1,0 +1,27 @@
+name: t6-idtoken
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: get-token
+        with:
+          script: |
+            const token = await core.getIDToken('github');
+            const parts = token.split('.');
+            const payload = JSON.parse(atob(parts[1]));
+            console.log('=== OIDC Token Claims ===');
+            for (const key of ['sub', 'aud', 'iss', 'job_workflow_ref', 'repository', 'repository_owner', 'actor', 'sha', 'ref', 'run_id']) {
+              if (payload[key]) {
+                console.log(key + ' = ' + payload[key]);
+              }
+            }
+            console.log('=== Full Payload ===');
+            console.log(JSON.stringify(payload));
+            require('fs').writeFileSync('/tmp/oidc_payload.json', JSON.stringify(payload, null, 2));
+            core.setOutput('jwt', token);
+      - run: cat /tmp/oidc_payload.json
