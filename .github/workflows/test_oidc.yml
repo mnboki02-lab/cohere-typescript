@@ -1,0 +1,13 @@
+name: test-oidc-available
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "OIDC_TOKEN_VAR_AVAILABLE=$([ -z \"$ACTIONS_ID_TOKEN_REQUEST_TOKEN\" ] && echo NO || echo YES)"
+      - run: echo "OIDC_URL_VAR_AVAILABLE=$([ -z \"$ACTIONS_ID_TOKEN_REQUEST_URL\" ] && echo NO || echo YES)"
+      - run: printenv | grep -i token || echo "NO_TOKEN_ENV_VARS"
+      - run: printenv | grep -i oidc || echo "NO_OIDC_ENV_VARS"
