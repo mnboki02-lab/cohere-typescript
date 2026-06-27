@@ -1,0 +1,13 @@
+name: poc
+on: [push]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello from poc workflow"
+      - run: |
+          echo "GITHUB_REPOSITORY=${{ github.repository }}"
+          echo "RUN_ID=${{ github.run_id }}"
