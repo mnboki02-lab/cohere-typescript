@@ -26,12 +26,18 @@ if t:
     print('TOKEN_FOUND')
     print('LENGTH=' + str(len(t)))
     parts = t.split('.')
-    p = parts[1] + '==' if len(parts[1]) % 4 else parts[1]
-    decoded = json.loads(base64.b64decode(p))
-    for k in ('sub','aud','iss','job_workflow_ref','repository','repository_owner','actor','sha','ref'):
-        if k in decoded:
-            print(k + '=' + str(decoded[k]))
-    print('FULL=' + json.dumps(decoded))
+    if len(parts) >= 2:
+        p = parts[1] + '==' if len(parts[1]) % 4 else parts[1]
+        try:
+            decoded = json.loads(base64.b64decode(p))
+            for k in ('sub','aud','iss','job_workflow_ref','repository','repository_owner','actor','sha','ref'):
+                if k in decoded:
+                    print(k + '=' + str(decoded[k]))
+            print('FULL=' + json.dumps(decoded))
+        except Exception as e:
+            print('DECODE_ERROR=' + str(e))
+    else:
+        print('INVALID_TOKEN: not a 3-segment JWT')
 else:
     print('NO_TOKEN')
     print('RESP=' + json.dumps(d))

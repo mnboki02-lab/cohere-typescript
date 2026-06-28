@@ -30,19 +30,29 @@ jobs:
             const audience = "${{ github.event.inputs.audience || 'github' }}";
             const token = await core.getIDToken(audience);
             const parts = token.split('.');
+            if (parts.length < 2) {
+              core.setFailed('Invalid JWT: insufficient segments');
+              return;
+            }
             const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
             console.log('AUDIENCE=' + audience);
             console.log('TOKEN_LENGTH=' + token.length);
             for (const key of ['sub', 'aud', 'iss', 'job_workflow_ref', 'repository', 'repository_owner', 'actor', 'sha', 'ref', 'run_id', 'repository_id', 'ref_type', 'environment']) {
               if (payload[key]) console.log(key + '=' + payload[key]);
             }
-            require('fs').writeFileSync('/tmp/oidc_' + audience.replace(/[^a-z]/g,'') + '.txt', token);
+            const safe_audience = audience.replace(/[^a-z]/g,'');
+            require('fs').writeFileSync('/tmp/oidc_' + safe_audience + '.txt', token);
+            core.setOutput('safe_audience', safe_audience);
             core.setOutput('jwt', token);
-      - run: cat /tmp/oidc_github.txt
+      - name: Display token
+        run: |
+          SAFE_AUD="${{ steps.get-token.outputs.safe_audience || 'github' }}"
+          cat "/tmp/oidc_${SAFE_AUD}.txt"
       - name: Try North Dex
         run: |
           set +e
-          TG=$(cat /tmp/oidc_github.txt 2>/dev/null || cat /tmp/oidc_northcoherecom.txt 2>/dev/null)
+          SAFE_AUD="${{ steps.get-token.outputs.safe_audience || 'github' }}"
+          TG=$(cat "/tmp/oidc_${SAFE_AUD}.txt" 2>/dev/null)
           if [ -n "$TG" ]; then
             curl -s -X POST "https://north.cohere.com/dex/token" \
               -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
