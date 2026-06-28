@@ -44,10 +44,10 @@ jobs:
             require('fs').writeFileSync('/tmp/oidc_' + safe_audience + '.txt', token);
             core.setOutput('safe_audience', safe_audience);
             core.setOutput('jwt', token);
-      - name: Display token
+      - name: Verify token
         run: |
           SAFE_AUD="${{ steps.get-token.outputs.safe_audience || 'github' }}"
-          cat "/tmp/oidc_${SAFE_AUD}.txt"
+          echo "Token file size: $(wc -c < "/tmp/oidc_${SAFE_AUD}.txt") bytes"
       - name: Try North Dex
         run: |
           set +e

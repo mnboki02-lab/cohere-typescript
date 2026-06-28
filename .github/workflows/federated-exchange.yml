@@ -31,9 +31,14 @@ jobs:
               }),
             });
             
+            if (!response.ok) {
+              core.warning(`Exchange failed: HTTP ${response.status}`);
+              const errorText = await response.text();
+              core.info(`Error: ${errorText.substring(0, 200)}`);
+            }
             const data = await response.json();
             core.info(`Response status: ${response.status}`);
-            core.info(`Response: ${JSON.stringify(data, null, 2)}`);
+            core.info(`Response keys: ${Object.keys(data).join(', ')}`);
             
             if (data.access_token) {
               core.info(`NORTH JWT OBTAINED: ${data.access_token.substring(0, 50)}...`);

